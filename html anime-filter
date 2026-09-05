@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Anime Name Filter</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 1.5rem; max-width: 800px; margin: auto; }
+    input[type="search"] { width: 100%; padding: .6rem .8rem; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: .6rem .8rem; border-bottom: 1px solid #eee; }
+    mark { background: #ffea8a; padding: 0 .1rem; border-radius: 2px; }
+    .hidden { display: none; }
+    .count { color: #555; margin-bottom: .5rem; }
+  </style>
+</head>
+<body>
+  <h1>Anime name filter</h1>
+  <p class="count" id="count">Showing 0</p>
+  <label for="filter" class="visually-hidden">Filter anime</label>
+  <input id="filter" type="search" placeholder="Type to filter (supports multiple words)..." aria-label="Filter anime names" />
+
+  <ul id="animeList">
+    <li data-name="Naruto">Naruto</li>
+    <li data-name="One Piece">One Piece</li>
+    <li data-name="Attack on Titan">Attack on Titan</li>
+    <li data-name="My Hero Academia">My Hero Academia</li>
+    <li data-name="Demon Slayer">Demon Slayer</li>
+    <li data-name="Fullmetal Alchemist: Brotherhood">Fullmetal Alchemist: Brotherhood</li>
+    <li data-name="Death Note">Death Note</li>
+    <li data-name="Cowboy Bebop">Cowboy Bebop</li>
+    <li data-name="Steins;Gate">Steins;Gate</li>
+    <li data-name="Hunter x Hunter">Hunter x Hunter</li>
+    <li data-name="Jujutsu Kaisen">Jujutsu Kaisen</li>
+    <li data-name="Spirited Away">Spirited Away</li>
+    <li data-name="Mob Psycho 100">Mob Psycho 100</li>
+    <li data-name="Haikyuu!!">Haikyuu!!</li>
+  </ul>
+
+  <script>
+    // Lightweight, safe filter + highlight implementation:
+    const input = document.getElementById('filter');
+    const list = document.getElementById('animeList');
+    const items = Array.from(list.querySelectorAll('li'));
+    const countEl = document.getElementById('count');
+
+    function escapeRegExp(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+    }
+
+    function updateCount(visible) {
+      countEl.textContent = `Showing ${visible} of ${items.length}`;
+    }
+
+    function filterAndHighlight() {
+      const raw = input.value.trim();
+      if (!raw) {
+        // show all, remove highlights
+        items.forEach(li => {
+          li.classList.remove('hidden');
+          li.innerHTML = escapeHtml(li.dataset.name);
+        });
+        updateCount(items.length);
+        return;
+      }
+
+      // split on whitespace, require all tokens to be present (AND)
+      const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
+      // build a regex that matches any token for highlighting
+      const tokenRegex = new RegExp(tokens.map(escapeRegExp).join('|'), 'ig');
+
+      let visible = 0;
+      items.forEach(li => {
+        const original = li.dataset.name;
+        const lower = original.toLowerCase();
+
+        const matchesAll = tokens.every(t => lower.includes(t));
+        if (!matchesAll) {
+          li.classList.add('hidden');
+        } else {
+          // highlight matches (safe by escaping content first)
+          const escaped = escapeHtml(original);
+          const highlighted = escaped.replace(tokenRegex, match => `<mark>${escapeHtml(match)}</mark>`);
+          li.innerHTML = highlighted;
+          li.classList.remove('hidden');
+          visible++;
+        }
+      });
+
+      updateCount(visible);
+    }
+
+    input.addEventListener('input', filterAndHighlight);
+
+    // initialize
+    filterAndHighlight();
+  </script>
+</body>
+</html>
