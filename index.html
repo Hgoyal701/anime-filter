@@ -3,172 +3,370 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Anime Name Filter</title>
+  <title>Anime Name Matcher / Filter</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 1.5rem; max-width: 800px; margin: auto; }
-    input[type="search"] { width: 100%; padding: .6rem .8rem; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; }
-    .controls { display:flex; gap:.5rem; align-items:center; margin-bottom: .5rem; }
-    button { padding: .5rem .7rem; font-size: 0.95rem; cursor: pointer; }
-    ul { list-style: none; padding: 0; margin: 0; }
-    li { padding: .6rem .8rem; border-bottom: 1px solid #eee; outline: none; }
-    li:focus { box-shadow: 0 0 0 3px rgba(0,123,255,.15); border-radius: 4px; }
-    mark { background: #ffea8a; padding: 0 .1rem; border-radius: 2px; }
-    .hidden { display: none; }
-    .count { color: #555; margin-bottom: .5rem; }
-    .visually-hidden {
-      position: absolute !important;
-      height: 1px; width: 1px;
-      overflow: hidden;
-      clip: rect(1px, 1px, 1px, 1px);
-      white-space: nowrap;
-      border: 0; padding: 0; margin: -1px;
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#9aa4b2; --accent:#7c3aed;
+      --glass: rgba(255,255,255,0.03);
     }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+      background:linear-gradient(180deg,#071025 0%, #081426 50%, #05131b 100%); color:#e6eef6;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      padding:28px;
+    }
+    .wrap{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:20px;}
+    header{grid-column:1/-1; margin-bottom:6px}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:6px 0 16px;color:var(--muted)}
+    .card{background:var(--card); border-radius:12px; padding:14px; box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+    textarea{width:100%;height:260px;background:var(--glass);border:1px solid rgba(255,255,255,0.04);color:inherit;padding:10px;border-radius:8px;resize:vertical}
+    .controls{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap}
+    input[type=text]{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .btn{background:linear-gradient(90deg,var(--accent),#4c1d95);border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer}
+    .small{font-size:13px;color:var(--muted)}
+    .results{overflow:auto;max-height:620px;padding:12px}
+    .result-item{padding:10px;border-radius:8px;margin-bottom:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+    .result-item:hover{outline:1px solid rgba(124,58,237,0.16)}
+    mark{background:rgba(124,58,237,0.22);color:#fff;padding:0 3px;border-radius:3px}
+    .score{font-weight:600;color:var(--muted);font-size:13px}
+    .footer{margin-top:10px;color:var(--muted);font-size:13px}
+    .options{display:flex;gap:10px;align-items:center}
+    label{font-size:13px;color:var(--muted)}
+    .kbd{background:#0b1220;border:1px solid rgba(255,255,255,0.03);padding:4px 8px;border-radius:6px;font-size:13px;color:var(--muted)}
+    .hint{font-size:13px;color:var(--muted);margin-top:8px}
+    .mode-select{background:transparent;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);color:inherit}
   </style>
 </head>
 <body>
-  <h1>Anime name filter</h1>
+  <div class="wrap">
+    <header>
+      <h1>Anime Name Matcher / Filter</h1>
+      <p class="lead">Type a query to find close matches from a list of anime names. Normalizes accents, punctuation and supports fuzzy/token matching.</p>
+    </header>
 
-  <div class="controls">
-    <p class="count" id="count" role="status" aria-live="polite">Showing 0</p>
-    <button id="clear" type="button" aria-label="Clear filter">Clear</button>
+    <section class="card" aria-labelledby="list-title">
+      <h3 id="list-title">Anime list</h3>
+      <p class="small">Edit the list here (one title per line), then click "Load list".</p>
+      <textarea id="anime-list" spellcheck="false"></textarea>
+      <div class="controls">
+        <button id="load-list" class="btn">Load list</button>
+        <button id="reset-sample" class="btn" style="background:linear-gradient(90deg,#06b6d4,#0891b2)">Reset sample</button>
+        <span class="small" style="margin-left:auto">Matches: <span id="count">0</span></span>
+      </div>
+      <div class="hint">Tip: paste large MAL/Anilist lists or use the sample. Titles can be English, Romaji, or native scripts.</div>
+    </section>
+
+    <section class="card" aria-labelledby="search-title">
+      <div style="display:flex;gap:12px;align-items:center">
+        <div style="flex:1">
+          <label for="query" class="small">Search</label>
+          <input id="query" type="text" placeholder="e.g. fullmetal alchemist, kuroko, 進撃の巨人" />
+        </div>
+        <div style="width:200px;">
+          <label class="small">Match mode</label><br/>
+          <select id="mode" class="mode-select" title="Choose how to rank matches">
+            <option value="balanced">Balanced (token + fuzzy)</option>
+            <option value="strict">Strict (prefix/token first)</option>
+            <option value="fuzzy">Fuzzy only (edit distance)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:10px;align-items:center">
+        <label class="small">Threshold</label>
+        <input id="threshold" type="range" min="0" max="100" value="30" />
+        <span class="small" id="threshold-val">0.30</span>
+        <div style="margin-left:auto" class="small">Up to <span id="max-results">50</span> results</div>
+      </div>
+
+      <div class="controls" style="margin-top:12px">
+        <button id="search-btn" class="btn">Search</button>
+        <button id="clear-btn" class="btn" style="background:#334155">Clear</button>
+        <div class="small" style="margin-left:auto">Use <span class="kbd">↑</span>/<span class="kbd">↓</span> to navigate, <span class="kbd">Enter</span> to copy</div>
+      </div>
+
+      <div class="results card" id="results" tabindex="0" aria-live="polite"></div>
+
+      <div class="footer">
+        <strong>How matching works:</strong> we normalize input & names (lowercase, remove punctuation & diacritics), then combine token matching and Levenshtein distance to score candidates. Adjust threshold and mode to tune sensitivity.
+      </div>
+    </section>
   </div>
 
-  <label for="filter" class="visually-hidden">Filter anime</label>
-  <input id="filter" type="search" placeholder="Type to filter (supports multiple words)..." aria-label="Filter anime names" />
-
-  <ul id="animeList">
-    <li data-name="Naruto" tabindex="0">Naruto</li>
-    <li data-name="One Piece" tabindex="0">One Piece</li>
-    <li data-name="Attack on Titan" tabindex="0">Attack on Titan</li>
-    <li data-name="My Hero Academia" tabindex="0">My Hero Academia</li>
-    <li data-name="Demon Slayer" tabindex="0">Demon Slayer</li>
-    <li data-name="Fullmetal Alchemist: Brotherhood" tabindex="0">Fullmetal Alchemist: Brotherhood</li>
-    <li data-name="Death Note" tabindex="0">Death Note</li>
-    <li data-name="Cowboy Bebop" tabindex="0">Cowboy Bebop</li>
-    <li data-name="Steins;Gate" tabindex="0">Steins;Gate</li>
-    <li data-name="Hunter x Hunter" tabindex="0">Hunter x Hunter</li>
-    <li data-name="Jujutsu Kaisen" tabindex="0">Jujutsu Kaisen</li>
-    <li data-name="Spirited Away" tabindex="0">Spirited Away</li>
-    <li data-name="Mob Psycho 100" tabindex="0">Mob Psycho 100</li>
-    <li data-name="Haikyuu!!" tabindex="0">Haikyuu!!</li>
-  </ul>
-
   <script>
-    // Lightweight, safe filter + highlight implementation (improvements):
-    // - debounce input
-    // - highlight by index ranges on the original string (avoids matching inside escaped HTML entities)
-    // - sort tokens by length so longer tokens match first
-    const input = document.getElementById('filter');
-    const list = document.getElementById('animeList');
-    const items = Array.from(list.querySelectorAll('li'));
-    const countEl = document.getElementById('count');
-    const clearBtn = document.getElementById('clear');
+  // ---- Utilities ----
+  function normalize(str){
+    if(!str) return '';
+    // Lowercase, NFD normalize then remove diacritics, replace non-alphanumeric with spaces, collapse spaces
+    return String(str).toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9\u00C0-\u024F\u3040-\u30FF\u4E00-\u9FFF\s]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+  function tokens(str){ return normalize(str).split(' ').filter(Boolean) }
 
-    function escapeRegExp(str) {
-      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
-    }
-
-    function updateCount(visible) {
-      countEl.textContent = `Showing ${visible} of ${items.length}`;
-    }
-
-    // Build highlighted HTML using index slices from original string (safe)
-    function highlightOriginal(original, tokens) {
-      if (!tokens.length) return escapeHtml(original);
-
-      // sort tokens by length desc to prefer longer matches
-      const sorted = tokens.slice().sort((a,b) => b.length - a.length).map(escapeRegExp);
-      const regex = new RegExp(sorted.join('|'), 'ig');
-
-      const matches = [];
-      let m;
-      // exec on the original (not escaped) so indexes align with original string
-      while ((m = regex.exec(original)) !== null) {
-        if (m[0].length === 0) {
-          // guard for pathological zero-length matches to avoid infinite loops
-          regex.lastIndex++;
-          continue;
-        }
-        matches.push({ index: m.index, length: m[0].length });
+  // Levenshtein distance
+  function levenshtein(a,b){
+    if(a===b) return 0;
+    const la=a.length, lb=b.length;
+    if(la===0) return lb;
+    if(lb===0) return la;
+    let prev = new Array(lb+1).fill(0).map((_,i)=>i);
+    for(let i=1;i<=la;i++){
+      let cur = [i];
+      for(let j=1;j<=lb;j++){
+        const cost = a[i-1] === b[j-1] ? 0 : 1;
+        cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost);
       }
-
-      if (!matches.length) return escapeHtml(original);
-
-      // merge into non-overlapping, left-to-right slices
-      matches.sort((a,b) => a.index - b.index);
-      const pieces = [];
-      let last = 0;
-      for (const mm of matches) {
-        if (mm.index < last) continue; // overlapping match; skip
-        if (mm.index > last) {
-          pieces.push(escapeHtml(original.slice(last, mm.index)));
-        }
-        pieces.push('<mark>' + escapeHtml(original.slice(mm.index, mm.index + mm.length)) + '</mark>');
-        last = mm.index + mm.length;
-      }
-      if (last < original.length) pieces.push(escapeHtml(original.slice(last)));
-
-      return pieces.join('');
+      prev = cur;
     }
+    return prev[lb];
+  }
 
-    function filterAndHighlight() {
-      const raw = input.value.trim();
-      if (!raw) {
-        // show all, remove highlights
-        items.forEach(li => {
-          li.classList.remove('hidden');
-          li.innerHTML = escapeHtml(li.dataset.name);
-        });
-        updateCount(items.length);
-        return;
-      }
-
-      // split on whitespace, require all tokens to be present (AND)
-      const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
-      let visible = 0;
-
-      items.forEach(li => {
-        const original = li.dataset.name;
-        const lower = original.toLowerCase();
-
-        const matchesAll = tokens.every(t => lower.includes(t));
-        if (!matchesAll) {
-          li.classList.add('hidden');
-        } else {
-          // highlight matches by index-slicing (safe)
-          const highlighted = highlightOriginal(original, tokens);
-          li.innerHTML = highlighted;
-          li.classList.remove('hidden');
-          visible++;
-        }
-      });
-
-      updateCount(visible);
-    }
-
-    // Debounce to avoid too-frequent updates on large lists
-    let debounceTimer = null;
-    function onInputDebounced() {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        filterAndHighlight();
-        debounceTimer = null;
-      }, 150);
-    }
-
-    input.addEventListener('input', onInputDebounced);
-    clearBtn.addEventListener('click', () => {
-      input.value = '';
-      input.focus();
-      filterAndHighlight();
+  // Highlight tokens in original string (case-insensitive)
+  function highlightMatch(original, query){
+    if(!query.trim()) return escapeHtml(original);
+    const qTokens = tokens(query);
+    let out = escapeHtml(original);
+    qTokens.forEach(t=>{
+      if(!t) return;
+      // Use regex global, case-insensitive, word-boundary friendly
+      const re = new RegExp(escapeRegExp(t), 'ig');
+      out = out.replace(re, m => '<mark>' + escapeHtml(m) + '</mark>');
     });
+    return out;
+  }
 
-    // initialize
-    filterAndHighlight();
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  // ---- Scoring ----
+  function scoreCandidate(name, query, mode='balanced'){
+    const nName = normalize(name);
+    const nQuery = normalize(query);
+    if(!nQuery) return 0;
+    if(nName === nQuery) return 1.0;
+
+    const qTokens = tokens(query);
+    const nameTokens = tokens(name);
+    // token match score: fraction of query tokens found as exact or prefix in name tokens
+    let matchedTokens = 0;
+    qTokens.forEach(qt=>{
+      for(const nt of nameTokens){
+        if(nt === qt || nt.startsWith(qt) || qt.startsWith(nt)) { matchedTokens++; break; }
+      }
+    });
+    const tokenScore = qTokens.length ? (matchedTokens / qTokens.length) : 0;
+
+    // edit distance score
+    const maxLen = Math.max(nName.length, nQuery.length) || 1;
+    const dist = levenshtein(nName, nQuery);
+    const editScore = 1 - Math.min(1, dist / maxLen);
+
+    // prefix/startsWith bonus
+    const starts = (nName.indexOf(nQuery) === 0 || nameTokens.some(t=>t.startsWith(nQuery))) ? 1 : 0;
+
+    let combined;
+    if(mode === 'strict'){
+      combined = Math.max(tokenScore * 0.9 + (starts?0.1:0), editScore*0.4);
+    } else if(mode === 'fuzzy'){
+      combined = editScore;
+    } else { // balanced
+      combined = 0.65 * tokenScore + 0.35 * editScore;
+      if(starts) combined = Math.max(combined, 0.85 * (1 + tokenScore)/2);
+    }
+
+    return Math.max(0, Math.min(1, combined));
+  }
+
+  // ---- UI State ----
+  const defaultList = [
+    "Fullmetal Alchemist: Brotherhood",
+    "Fullmetal Alchemist",
+    "Naruto",
+    "Naruto: Shippuden",
+    "Bleach",
+    "One Piece",
+    "Attack on Titan",
+    "進撃の巨人",
+    "My Hero Academia",
+    "僕のヒーローアカデミア",
+    "Demon Slayer: Kimetsu no Yaiba",
+    "鬼滅の刃",
+    "Death Note",
+    "Code Geass: Lelouch of the Rebellion",
+    "Steins;Gate",
+    "Cowboy Bebop",
+    "Neon Genesis Evangelion",
+    "Hunter x Hunter",
+    "JoJo's Bizarre Adventure",
+    "Sword Art Online",
+    "Spirited Away",
+    "Kimi no Na wa",
+    "Your Name.",
+    "Violet Evergarden",
+    "Mob Psycho 100",
+    "Gintama",
+    "Made in Abyss",
+    "Toradora!",
+    "Clannad",
+    "Re:Zero − Starting Life in Another World",
+    "Black Clover",
+    "Fruits Basket",
+    "The Promised Neverland",
+    "Haikyuu!!",
+    "Kaguya-sama: Love is War",
+    "Oshi no Ko",
+    "Vivy -Fluorite Eye's Song-",
+    "The Rising of the Shield Hero",
+    "K-On!",
+    "Love Live! School Idol Project",
+    "Kuroko's Basketball",
+    "Detective Conan",
+    "Case Closed",
+    "Akira",
+    "Princess Mononoke",
+    "Howl's Moving Castle",
+    "Boku dake ga Inai Machi",
+    "Erased",
+    "Yuri!!! on Ice",
+    "Psycho-Pass",
+    "Parasyte: The Maxim"
+  ];
+
+  // Elements
+  const animeListEl = document.getElementById('anime-list');
+  const loadBtn = document.getElementById('load-list');
+  const resetBtn = document.getElementById('reset-sample');
+  const queryEl = document.getElementById('query');
+  const searchBtn = document.getElementById('search-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const resultsEl = document.getElementById('results');
+  const thresholdEl = document.getElementById('threshold');
+  const thresholdVal = document.getElementById('threshold-val');
+  const modeEl = document.getElementById('mode');
+  const countEl = document.getElementById('count');
+  const maxResults = parseInt(document.getElementById('max-results').textContent,10) || 50;
+
+  let animeArray = defaultList.slice();
+  let results = [];
+  let selectedIndex = -1;
+
+  function loadSample(){ animeListEl.value = defaultList.join('\\n'); loadListFromTextarea(); }
+  function loadListFromTextarea(){
+    const lines = animeListEl.value.split('\\n').map(s=>s.trim()).filter(Boolean);
+    animeArray = lines;
+    countEl.textContent = animeArray.length;
+    resultsEl.innerHTML = '';
+  }
+
+  // initialize
+  loadSample();
+
+  loadBtn.addEventListener('click', ()=>{ loadListFromTextarea(); doSearch(); });
+  resetBtn.addEventListener('click', ()=>{ loadSample(); });
+  searchBtn.addEventListener('click', doSearch);
+  clearBtn.addEventListener('click', ()=>{ queryEl.value=''; doSearch(); });
+  thresholdEl.addEventListener('input', ()=>{ thresholdVal.textContent = (thresholdEl.value/100).toFixed(2); });
+
+  queryEl.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); doSearch(); }
+    if(e.key === 'ArrowDown'){ e.preventDefault(); moveSelect(1); }
+    if(e.key === 'ArrowUp'){ e.preventDefault(); moveSelect(-1); }
+  });
+
+  resultsEl.addEventListener('keydown', (e)=>{
+    if(e.key === 'ArrowDown'){ e.preventDefault(); moveSelect(1); }
+    if(e.key === 'ArrowUp'){ e.preventDefault(); moveSelect(-1); }
+    if(e.key === 'Enter'){ e.preventDefault(); activateSelected(); }
+  });
+
+  function doSearch(){
+    const q = queryEl.value.trim();
+    const thresh = Number(thresholdEl.value)/100;
+    const mode = modeEl.value;
+    if(!q){
+      results = [];
+      renderResults([]);
+      return;
+    }
+    const scored = animeArray.map((name,i)=>{
+      return {name, score: scoreCandidate(name, q, mode), idx:i};
+    }).filter(x => x.score >= thresh)
+      .sort((a,b)=> b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0,maxResults);
+    results = scored;
+    selectedIndex = -1;
+    renderResults(scored, q);
+  }
+
+  function renderResults(list, q=''){
+    resultsEl.innerHTML = '';
+    if(!list.length){
+      resultsEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">No matches</div>';
+      return;
+    }
+    for(let i=0;i<list.length;i++){
+      const it = list[i];
+      const div = document.createElement('div');
+      div.className = 'result-item';
+      div.tabIndex = 0;
+      div.dataset.index = i;
+      div.innerHTML = '<div style="flex:1"><div style="font-weight:600">' + highlightMatch(it.name, q) + '</div><div class="small" style="margin-top:4px;color:var(--muted)">' + escapeHtml(it.name) + '</div></div><div class="score">' + (it.score*100|0) + '%</div>';
+      div.addEventListener('click', ()=>{ copyToClipboard(it.name); flash(div); });
+      div.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ copyToClipboard(it.name); flash(div)} });
+      resultsEl.appendChild(div);
+    }
+  }
+
+  function copyToClipboard(text){
+    navigator.clipboard?.writeText(text).then(()=>{ toast('Copied: ' + text); }, ()=>{ alert('Copy failed — select and copy manually'); });
+  }
+
+  function flash(el){
+    const orig = el.style.outline;
+    el.style.outline = '2px solid rgba(124,58,237,0.4)';
+    setTimeout(()=> el.style.outline = orig, 300);
+  }
+
+  function toast(msg){
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.position='fixed'; t.style.bottom='18px'; t.style.right='18px';
+    t.style.padding='10px 14px'; t.style.background='rgba(2,6,23,0.8)'; t.style.border='1px solid rgba(255,255,255,0.04)';
+    t.style.borderRadius='10px'; t.style.color='#e6eef6'; t.style.zIndex=9999;
+    document.body.appendChild(t);
+    setTimeout(()=> t.style.opacity = '0', 2000);
+    setTimeout(()=> t.remove(), 2600);
+  }
+
+  function moveSelect(delta){
+    if(!results.length) return;
+    selectedIndex = Math.max(0, Math.min(results.length-1, (selectedIndex===-1?0:selectedIndex) + delta));
+    const nodes = resultsEl.querySelectorAll('.result-item');
+    nodes.forEach(n=> n.style.boxShadow = 'none' );
+    const cur = nodes[selectedIndex];
+    if(cur){
+      cur.style.boxShadow = 'inset 0 0 0 2px rgba(124,58,237,0.12)';
+      cur.focus();
+      cur.scrollIntoView({block:'nearest'});
+    }
+  }
+  function activateSelected(){
+    if(selectedIndex>=0 && results[selectedIndex]){
+      copyToClipboard(results[selectedIndex].name);
+    }
+  }
+
+  // initial sample load
+  document.addEventListener('DOMContentLoaded', ()=>{ if(!animeListEl.value) loadSample(); thresholdVal.textContent=(thresholdEl.value/100).toFixed(2); });
+
+  // expose small helpers for debugging
+  window._animeMatcher = {scoreCandidate, normalize, tokens, levenshtein};
+
   </script>
 </body>
 </html>
