@@ -7,42 +7,62 @@
   <style>
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 1.5rem; max-width: 800px; margin: auto; }
     input[type="search"] { width: 100%; padding: .6rem .8rem; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; }
+    .controls { display:flex; gap:.5rem; align-items:center; margin-bottom: .5rem; }
+    button { padding: .5rem .7rem; font-size: 0.95rem; cursor: pointer; }
     ul { list-style: none; padding: 0; margin: 0; }
-    li { padding: .6rem .8rem; border-bottom: 1px solid #eee; }
+    li { padding: .6rem .8rem; border-bottom: 1px solid #eee; outline: none; }
+    li:focus { box-shadow: 0 0 0 3px rgba(0,123,255,.15); border-radius: 4px; }
     mark { background: #ffea8a; padding: 0 .1rem; border-radius: 2px; }
     .hidden { display: none; }
     .count { color: #555; margin-bottom: .5rem; }
+    .visually-hidden {
+      position: absolute !important;
+      height: 1px; width: 1px;
+      overflow: hidden;
+      clip: rect(1px, 1px, 1px, 1px);
+      white-space: nowrap;
+      border: 0; padding: 0; margin: -1px;
+    }
   </style>
 </head>
 <body>
   <h1>Anime name filter</h1>
-  <p class="count" id="count">Showing 0</p>
+
+  <div class="controls">
+    <p class="count" id="count" role="status" aria-live="polite">Showing 0</p>
+    <button id="clear" type="button" aria-label="Clear filter">Clear</button>
+  </div>
+
   <label for="filter" class="visually-hidden">Filter anime</label>
   <input id="filter" type="search" placeholder="Type to filter (supports multiple words)..." aria-label="Filter anime names" />
 
   <ul id="animeList">
-    <li data-name="Naruto">Naruto</li>
-    <li data-name="One Piece">One Piece</li>
-    <li data-name="Attack on Titan">Attack on Titan</li>
-    <li data-name="My Hero Academia">My Hero Academia</li>
-    <li data-name="Demon Slayer">Demon Slayer</li>
-    <li data-name="Fullmetal Alchemist: Brotherhood">Fullmetal Alchemist: Brotherhood</li>
-    <li data-name="Death Note">Death Note</li>
-    <li data-name="Cowboy Bebop">Cowboy Bebop</li>
-    <li data-name="Steins;Gate">Steins;Gate</li>
-    <li data-name="Hunter x Hunter">Hunter x Hunter</li>
-    <li data-name="Jujutsu Kaisen">Jujutsu Kaisen</li>
-    <li data-name="Spirited Away">Spirited Away</li>
-    <li data-name="Mob Psycho 100">Mob Psycho 100</li>
-    <li data-name="Haikyuu!!">Haikyuu!!</li>
+    <li data-name="Naruto" tabindex="0">Naruto</li>
+    <li data-name="One Piece" tabindex="0">One Piece</li>
+    <li data-name="Attack on Titan" tabindex="0">Attack on Titan</li>
+    <li data-name="My Hero Academia" tabindex="0">My Hero Academia</li>
+    <li data-name="Demon Slayer" tabindex="0">Demon Slayer</li>
+    <li data-name="Fullmetal Alchemist: Brotherhood" tabindex="0">Fullmetal Alchemist: Brotherhood</li>
+    <li data-name="Death Note" tabindex="0">Death Note</li>
+    <li data-name="Cowboy Bebop" tabindex="0">Cowboy Bebop</li>
+    <li data-name="Steins;Gate" tabindex="0">Steins;Gate</li>
+    <li data-name="Hunter x Hunter" tabindex="0">Hunter x Hunter</li>
+    <li data-name="Jujutsu Kaisen" tabindex="0">Jujutsu Kaisen</li>
+    <li data-name="Spirited Away" tabindex="0">Spirited Away</li>
+    <li data-name="Mob Psycho 100" tabindex="0">Mob Psycho 100</li>
+    <li data-name="Haikyuu!!" tabindex="0">Haikyuu!!</li>
   </ul>
 
   <script>
-    // Lightweight, safe filter + highlight implementation:
+    // Lightweight, safe filter + highlight implementation (improvements):
+    // - debounce input
+    // - highlight by index ranges on the original string (avoids matching inside escaped HTML entities)
+    // - sort tokens by length so longer tokens match first
     const input = document.getElementById('filter');
     const list = document.getElementById('animeList');
     const items = Array.from(list.querySelectorAll('li'));
     const countEl = document.getElementById('count');
+    const clearBtn = document.getElementById('clear');
 
     function escapeRegExp(str) {
       return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -54,6 +74,45 @@
 
     function updateCount(visible) {
       countEl.textContent = `Showing ${visible} of ${items.length}`;
+    }
+
+    // Build highlighted HTML using index slices from original string (safe)
+    function highlightOriginal(original, tokens) {
+      if (!tokens.length) return escapeHtml(original);
+
+      // sort tokens by length desc to prefer longer matches
+      const sorted = tokens.slice().sort((a,b) => b.length - a.length).map(escapeRegExp);
+      const regex = new RegExp(sorted.join('|'), 'ig');
+
+      const matches = [];
+      let m;
+      // exec on the original (not escaped) so indexes align with original string
+      while ((m = regex.exec(original)) !== null) {
+        if (m[0].length === 0) {
+          // guard for pathological zero-length matches to avoid infinite loops
+          regex.lastIndex++;
+          continue;
+        }
+        matches.push({ index: m.index, length: m[0].length });
+      }
+
+      if (!matches.length) return escapeHtml(original);
+
+      // merge into non-overlapping, left-to-right slices
+      matches.sort((a,b) => a.index - b.index);
+      const pieces = [];
+      let last = 0;
+      for (const mm of matches) {
+        if (mm.index < last) continue; // overlapping match; skip
+        if (mm.index > last) {
+          pieces.push(escapeHtml(original.slice(last, mm.index)));
+        }
+        pieces.push('<mark>' + escapeHtml(original.slice(mm.index, mm.index + mm.length)) + '</mark>');
+        last = mm.index + mm.length;
+      }
+      if (last < original.length) pieces.push(escapeHtml(original.slice(last)));
+
+      return pieces.join('');
     }
 
     function filterAndHighlight() {
@@ -70,10 +129,8 @@
 
       // split on whitespace, require all tokens to be present (AND)
       const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
-      // build a regex that matches any token for highlighting
-      const tokenRegex = new RegExp(tokens.map(escapeRegExp).join('|'), 'ig');
-
       let visible = 0;
+
       items.forEach(li => {
         const original = li.dataset.name;
         const lower = original.toLowerCase();
@@ -82,9 +139,8 @@
         if (!matchesAll) {
           li.classList.add('hidden');
         } else {
-          // highlight matches (safe by escaping content first)
-          const escaped = escapeHtml(original);
-          const highlighted = escaped.replace(tokenRegex, match => `<mark>${escapeHtml(match)}</mark>`);
+          // highlight matches by index-slicing (safe)
+          const highlighted = highlightOriginal(original, tokens);
           li.innerHTML = highlighted;
           li.classList.remove('hidden');
           visible++;
@@ -94,7 +150,22 @@
       updateCount(visible);
     }
 
-    input.addEventListener('input', filterAndHighlight);
+    // Debounce to avoid too-frequent updates on large lists
+    let debounceTimer = null;
+    function onInputDebounced() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        filterAndHighlight();
+        debounceTimer = null;
+      }, 150);
+    }
+
+    input.addEventListener('input', onInputDebounced);
+    clearBtn.addEventListener('click', () => {
+      input.value = '';
+      input.focus();
+      filterAndHighlight();
+    });
 
     // initialize
     filterAndHighlight();
